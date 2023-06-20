@@ -5,28 +5,35 @@ Producer script for Hogwarts attendance Kafka topic.
 """
 
 import json
-from configparser import ConfigParser
+# from configparser import ConfigParser
 from datetime import datetime
 from time import sleep
 
 from kafka import KafkaProducer as Producer
+from kafka.errors import KafkaTimeoutError
 
 from utils import hogwarts_generator as hg
 
 # Kafka configuration
-config_file = 'config.ini'
-config_parser = ConfigParser()
+kafka_host = 'localhost:9092'
 
-with open(config_file, 'r', encoding='utf-8') as file:
-    config_parser.read_file(file)
+# config_file = 'config.ini'
+# config_parser = ConfigParser()
 
-config = dict(config_parser['default'])
+# with open(config_file, 'r', encoding='utf-8') as file:
+#     config_parser.read_file(file)
+
+# config = dict(config_parser['default'])
 
 # Kafka producer
 topic = 'hogwarts_attendance'
+# producer = Producer(**config)
 producer = Producer(
+    bootstrap_servers=kafka_host,
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    **config
+    api_version=(0, 10, 1),
+    batch_size=16384,
+    linger_ms=5
 )
 
 def publish_hogwarts_attendance(student):
@@ -37,14 +44,15 @@ def publish_hogwarts_attendance(student):
         'student': student
     }
 
-    producer.send(
-        topic,
-        value=data
-    )
+    try:
+        producer.send(topic, value=data)
+        producer.flush()
 
-    producer.flush()
+        print(f"Published to `{topic}`. Value: {data}")
 
-    print(f"Published to `{topic}`. Value: {data}")
+    except KafkaTimeoutError:
+        print("Timeout error.")
+
 
 def main():
     """ Main function """
